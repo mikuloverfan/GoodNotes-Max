@@ -1,0 +1,968 @@
+/* ============================================
+   GoodNote Max — Balanced Sidebar UI
+   Safe margins, inline header, stable hierarchy
+   ============================================ */
+
+/* --- View container — safe padding --- */
+
+.goodnote-max-view {
+  padding: 8px 12px;
+}
+
+/* ============================================
+   1. Header row — title + button inline
+   ============================================ */
+
+.goodnote-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 8px;
+}
+
+.goodnote-max-view h4 {
+  margin: 0;
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--text-normal);
+  text-transform: uppercase;
+  letter-spacing: 0.3px;
+}
+
+/* ============================================
+   3. Create button — light accent
+   ============================================ */
+
+.goodnote-header > button {
+  font-size: 13px;
+  font-weight: 500;
+  padding: 4px 8px;
+  background: transparent;
+  border: none;
+  border-radius: 4px;
+  color: var(--text-muted);
+  cursor: pointer;
+  margin: 0;
+}
+
+.goodnote-header > button:hover {
+  color: var(--interactive-accent);
+  background-color: var(--background-modifier-hover);
+}
+
+/* ============================================
+   4. List — stable information layer
+   ============================================ */
+
+.goodnote-max-view ul {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+}
+
+.goodnote-max-view li {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 12px;
+  margin: 2px 0;
+  border-radius: 6px;
+  border-left: 3px solid transparent;
+  cursor: pointer;
+  transition: background-color 0.12s ease;
+}
+
+.goodnote-max-view li:hover {
+  background-color: var(--background-modifier-hover);
+}
+
+.goodnote-max-view li.is-selected {
+  background-color: var(--background-modifier-hover);
+  border-left-color: var(--interactive-accent);
+}
+
+.goodnote-max-view li span {
+  flex: 1;
+  font-size: 14px;
+  line-height: 1.5;
+}
+
+/* --- Delete button — hidden, reveal on row hover --- */
+
+.goodnote-max-view li button {
+  flex-shrink: 0;
+  background: transparent;
+  border: none;
+  opacity: 0;
+  padding: 4px 6px;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 13px;
+  line-height: 1;
+  color: var(--text-muted);
+  transition: opacity 0.12s ease;
+}
+
+.goodnote-max-view li:hover button {
+  opacity: 0.5;
+}
+
+.goodnote-max-view li button:hover {
+  opacity: 1;
+  color: var(--text-error);
+}
+
+/* ============================================
+   5. PageView — GoodNotes-style right sidebar
+   Header → Page List → Footer
+   UI 只读 AppState，action → PageManager
+   ============================================ */
+
+.goodnote-page-view {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  padding: 0;
+  overflow: hidden;
+}
+
+/* ── Header ── */
+
+.gn-page-header {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  padding: 0;
+  border-bottom: 1px solid var(--background-modifier-border);
+  flex-shrink: 0;
+}
+
+.gn-page-header-top {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 14px 6px;
+}
+
+.gn-page-header-title {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex: 1;
+  background: none;
+  border: none;
+  padding: 4px 6px;
+  border-radius: 6px;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-normal);
+  cursor: pointer;
+  text-align: left;
+  min-width: 0;
+}
+
+.gn-page-header-title:hover {
+  background: var(--background-modifier-hover);
+}
+
+.gn-page-header-chevron {
+  font-size: 10px;
+  color: var(--text-muted);
+  transition: transform 200ms ease;
+  flex-shrink: 0;
+}
+
+.gn-page-count-badge {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text-muted);
+  background: var(--background-modifier-hover);
+  padding: 2px 7px;
+  border-radius: 10px;
+  flex-shrink: 0;
+}
+
+/* ── Dropdown menu ── */
+
+.gn-page-dropdown {
+  position: absolute;
+  top: 100%;
+  left: 10px;
+  right: 10px;
+  z-index: 30;
+  background: var(--background-primary);
+  border: 1px solid var(--background-modifier-border);
+  border-radius: 8px;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.12);
+  padding: 4px 0;
+  animation: gn-dropdown-in 150ms ease;
+}
+
+@keyframes gn-dropdown-in {
+  from { opacity: 0; transform: translateY(-6px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+.gn-page-dropdown-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 14px;
+  font-size: 13px;
+  color: var(--text-normal);
+  cursor: pointer;
+  transition: background-color 100ms ease;
+}
+
+.gn-page-dropdown-item:hover {
+  background: var(--background-modifier-hover);
+}
+
+.gn-page-dropdown-icon {
+  font-size: 14px;
+  width: 20px;
+  text-align: center;
+  flex-shrink: 0;
+  color: var(--text-muted);
+}
+
+/* ── Page List ── */
+
+.gn-page-list {
+  flex: 1;
+  overflow-y: auto;
+  overflow-x: hidden;
+  padding: 6px 10px;
+}
+
+/* ── Page Card ── */
+
+.gn-page-card {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 8px;
+  margin: 2px 0;
+  border-radius: 8px;
+  cursor: pointer;
+  transition: background-color 120ms ease, border-color 120ms ease;
+  border: 1px solid transparent;
+  border-left: 3px solid transparent;
+}
+
+.gn-page-card:hover {
+  background: var(--background-modifier-hover);
+  border-color: var(--background-modifier-border);
+  border-left-color: var(--background-modifier-border);
+}
+
+.gn-page-card.is-active {
+  background: var(--background-modifier-hover);
+  border-color: var(--interactive-accent);
+  border-left-color: var(--interactive-accent);
+}
+
+/* ── Thumbnail ── */
+
+.gn-page-thumb {
+  position: relative;
+  width: 44px;
+  height: 56px;
+  border-radius: 5px;
+  background: var(--background-secondary);
+  border: 1px solid var(--background-modifier-border);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  overflow: hidden;
+}
+
+.gn-page-thumb-placeholder {
+  font-size: 18px;
+  opacity: 0.4;
+}
+
+.gn-page-thumb-img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.gn-page-stroke-hint {
+  font-size: 8px;
+  color: var(--text-faint);
+  position: absolute;
+  bottom: 2px;
+  left: 0;
+  right: 0;
+  text-align: center;
+}
+
+/* ── Page Info ── */
+
+.gn-page-info {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+  flex: 1;
+}
+
+.gn-page-title {
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--text-normal);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.gn-page-meta {
+  font-size: 10px;
+  color: var(--text-faint);
+}
+
+/* ── Footer ── */
+
+.gn-page-footer {
+  flex-shrink: 0;
+  padding: 8px 12px 10px;
+  border-top: 1px solid var(--background-modifier-border);
+}
+
+.gn-page-new-btn {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  padding: 9px 0;
+  background: transparent;
+  border: 1px dashed var(--background-modifier-border);
+  border-radius: 8px;
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--text-muted);
+  cursor: pointer;
+  transition: all 120ms ease;
+}
+
+.gn-page-new-btn:hover {
+  background: var(--background-modifier-hover);
+  border-color: var(--interactive-accent);
+  color: var(--interactive-accent);
+}
+
+/* ── Placeholder ── */
+
+.gn-page-placeholder {
+  padding: 32px 16px;
+  text-align: center;
+  font-size: 13px;
+  color: var(--text-muted);
+}
+
+/* ============================================
+   Thumbnail Mode — grid cards
+   同数据源，视觉优先投影
+   ============================================ */
+
+.gn-page-list-thumb {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(110px, 1fr));
+  gap: 8px;
+  align-content: start;
+}
+
+.gn-page-thumb-card {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  padding: 8px;
+  border-radius: 8px;
+  cursor: pointer;
+  transition: background-color 120ms ease, border-color 120ms ease;
+  border: 1px solid transparent;
+}
+
+.gn-page-thumb-card:hover {
+  background: var(--background-modifier-hover);
+  border-color: var(--background-modifier-border);
+}
+
+.gn-page-thumb-card.is-active {
+  background: var(--background-modifier-hover);
+  border-color: #3b82f6;
+  border-width: 2px;
+  transform: scale(1.03);
+  box-shadow: 0 4px 12px rgba(59, 130, 246, 0.25);
+  z-index: 1;
+}
+
+.gn-page-thumb-preview {
+  position: relative;
+  width: 100%;
+  aspect-ratio: 3 / 4;
+  border-radius: 6px;
+  background: var(--background-secondary);
+  border: 1px solid var(--background-modifier-border);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+}
+
+.gn-page-thumb-preview-icon {
+  font-size: 28px;
+  opacity: 0.35;
+}
+
+.gn-page-thumb-preview-img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+/* ── Page Identity badge — top-left overlay ── */
+
+.gn-thumb-badge {
+  position: absolute;
+  top: 4px;
+  left: 4px;
+  font-size: 10px;
+  font-weight: 600;
+  color: #ffffff;
+  background: rgba(0, 0, 0, 0.55);
+  padding: 2px 6px;
+  border-radius: 4px;
+  line-height: 1.4;
+  z-index: 2;
+  pointer-events: none;
+  white-space: nowrap;
+}
+
+/* ── Time meta — subdued bottom label ── */
+
+.gn-thumb-meta {
+  font-size: 10px;
+  color: var(--text-faint);
+  opacity: 0.6;
+  line-height: 1;
+  text-align: center;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.gn-page-thumb-stroke-badge {
+  position: absolute;
+  bottom: 4px;
+  right: 4px;
+  font-size: 9px;
+  font-weight: 600;
+  color: var(--text-muted);
+  background: var(--background-primary);
+  padding: 1px 5px;
+  border-radius: 6px;
+  border: 1px solid var(--background-modifier-border);
+}
+
+.gn-page-thumb-title {
+  font-size: 11px;
+  font-weight: 500;
+  color: var(--text-normal);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 100%;
+  text-align: center;
+}
+
+/* --- Mode toolbar --- */
+
+.goodnote-mode-toolbar {
+  display: flex;
+  gap: 4px;
+}
+
+.goodnote-mode-toolbar button {
+  font-size: 11px;
+  padding: 2px 6px;
+  background: transparent;
+  border: 1px solid var(--background-modifier-border);
+  border-radius: 3px;
+  color: var(--text-muted);
+  cursor: pointer;
+}
+
+.goodnote-mode-toolbar button:hover {
+  color: var(--text-normal);
+  border-color: var(--text-muted);
+}
+
+.goodnote-mode-toolbar button.is-active {
+  color: var(--text-on-accent);
+  background: var(--interactive-accent);
+  border-color: var(--interactive-accent);
+}
+
+/* --- Thumbnail grid --- */
+
+.goodnote-thumbnail-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(96px, 1fr));
+  gap: 8px;
+}
+
+.goodnote-thumb-card {
+  padding: 16px 8px 10px;
+  border-radius: 8px;
+  background: var(--background-secondary);
+  border: 1px solid var(--background-modifier-border);
+  text-align: center;
+  cursor: pointer;
+  transition: background-color 0.12s ease, border-color 0.12s ease;
+}
+
+.goodnote-thumb-card:hover {
+  background: var(--background-modifier-hover);
+  border-color: var(--interactive-accent);
+}
+
+.goodnote-thumb-preview {
+  font-size: 32px;
+  margin-bottom: 6px;
+}
+
+.goodnote-thumb-label {
+  font-size: 11px;
+  color: var(--text-muted);
+  font-weight: 500;
+}
+
+/* --- Editor mode --- */
+
+.goodnote-editor-info {
+  padding: 8px 12px;
+  margin-bottom: 8px;
+  border-radius: 6px;
+  background: var(--background-secondary);
+}
+
+.goodnote-editor-info .goodnote-sub {
+  font-size: 12px;
+  color: var(--text-muted);
+  margin-top: 2px;
+}
+
+/* --- Placeholder --- */
+
+.goodnote-placeholder {
+  padding: 24px;
+  text-align: center;
+  color: var(--text-muted);
+  font-size: 13px;
+}
+
+/* --- Canvas Runtime --- */
+
+.goodnote-canvas-container {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+}
+
+.goodnote-canvas-toolbar {
+  display: flex;
+  gap: 4px;
+  padding: 4px 0;
+  margin-bottom: 4px;
+}
+
+.goodnote-canvas-toolbar button {
+  font-size: 11px;
+  padding: 3px 8px;
+  background: transparent;
+  border: 1px solid var(--background-modifier-border);
+  border-radius: 3px;
+  color: var(--text-muted);
+  cursor: pointer;
+}
+
+.goodnote-canvas-toolbar button:hover {
+  color: var(--text-normal);
+  border-color: var(--text-muted);
+}
+
+.goodnote-canvas-toolbar button.is-active {
+  color: var(--text-on-accent);
+  background: var(--interactive-accent);
+  border-color: var(--interactive-accent);
+}
+
+.goodnote-canvas-wrapper {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+  border-radius: 6px;
+  border: 1px solid var(--background-modifier-border);
+}
+
+.goodnote-canvas {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  display: block;
+  /* 🔒 Hide system cursor — custom cursor overlay handles all visual feedback */
+  cursor: none;
+}
+
+/* ============================================
+   Cursor Overlay — Photoshop/GoodNotes style custom cursor
+   Positioned by JS, styled per active tool
+   ============================================ */
+
+.goodnote-cursor-overlay {
+  position: fixed;
+  pointer-events: none;
+  z-index: 100;
+  transform: translate(-50%, -50%);
+  will-change: left, top;
+  transition: width 120ms ease, height 120ms ease, border-radius 120ms ease, background 120ms ease;
+}
+
+/* ── Pen — PS级笔刷预览：黑色外圈 + 内部透明 + 边缘柔化 ── */
+.goodnote-cursor-overlay.cursor-pen {
+  border-radius: 50%;
+  background: transparent;
+  border: 2px solid rgba(0, 0, 0, 0.8);
+  box-shadow:
+    0 0 4px rgba(0, 0, 0, 0.12),
+    0 0 8px rgba(0, 0, 0, 0.06),
+    inset 0 0 0 0 transparent;
+  opacity: 0.85;
+}
+
+/* ── Eraser — 白色半透明圆，灰色边框，与实际擦除半径对齐 ── */
+.goodnote-cursor-overlay.cursor-eraser {
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.35);
+  border: 2px solid rgba(128, 128, 128, 0.55);
+  box-shadow: 0 0 6px rgba(0, 0, 0, 0.08);
+  opacity: 0.9;
+}
+
+/* ── Hand — emoji grab cursor ── */
+.goodnote-cursor-overlay.cursor-hand {
+  width: 28px;
+  height: 28px;
+  border-radius: 0;
+  background: transparent;
+  border: none;
+  box-shadow: none;
+  font-size: 24px;
+  line-height: 28px;
+  text-align: center;
+  color: rgba(0, 0, 0, 0.7);
+}
+
+/* Hand grabbing state */
+.goodnote-cursor-overlay.cursor-hand-grabbing {
+  width: 28px;
+  height: 28px;
+  border-radius: 0;
+  background: transparent;
+  border: none;
+  box-shadow: none;
+  font-size: 24px;
+  line-height: 28px;
+  text-align: center;
+  color: rgba(0, 0, 0, 0.9);
+}
+
+/* Hidden state */
+.goodnote-cursor-overlay.cursor-hidden {
+  opacity: 0;
+}
+
+/* ============================================
+   CanvasLayout — absolute overlay (canvas + drawer)
+   Canvas = world layer (never resizes)
+   Drawer = UI overlay (floats on top)
+   ============================================ */
+
+/* ============================================
+   Canvas Isolation Layer (冻结)
+   canvas = absolute full-screen base
+   sidebar = overlay / sibling (never pushes canvas)
+   ============================================ */
+
+.goodnote-canvas-view {
+  display: block;
+  height: 100%;
+  overflow: hidden;
+  flex: none !important;
+  min-width: 0;
+}
+
+.goodnote-canvas-layout {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  flex: none;
+  flex-shrink: 0;
+  min-width: 0;
+  overflow: hidden;
+  pointer-events: none;
+  z-index: 2;
+}
+
+/* ============================================
+   Z-Index Hierarchy (冻结)
+   canvas → z1 | toolbar → z10 | drawer → z20 | modal → z30
+   ============================================ */
+
+.goodnote-canvas-area {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  z-index: 1;
+  flex: none !important;
+}
+
+/* ============================================
+   Floating Toolbar — absolute overlay on canvas
+   ============================================ */
+
+/* ============================================
+   Floating Toolbar — JS-only position (CSS MUST NOT set top/left/transform)
+   Position is exclusively controlled by JS via style.transform
+   ============================================ */
+
+/* ============================================
+   Floating Toolbar — JS-only position (CSS MUST NOT set top/left/transform)
+   Position is exclusively controlled by JS via style.transform
+   Layout is HARD-LOCKED to row — no external CSS can change it
+   ============================================ */
+
+.goodnote-floating-toolbar {
+  position: absolute;
+  top: 0;
+  left: 0;
+  z-index: 10;
+  pointer-events: auto;
+  touch-action: none;
+  display: flex !important;
+  flex-direction: row;
+  flex-wrap: nowrap !important;
+  flex-shrink: 0 !important;
+  width: fit-content;
+  min-width: fit-content;
+  max-width: none;
+  height: auto;
+  min-height: auto;
+  gap: 4px;
+  padding: 6px 10px;
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.85);
+  backdrop-filter: blur(8px);
+  box-shadow: 0 2px 12px rgba(0, 0, 0, 0.08);
+  border: 1px solid var(--background-modifier-border);
+  cursor: grab;
+  user-select: none;
+  transition: opacity 200ms ease;
+}
+
+/* ── Layout mode: horizontal (default, top/bottom dock, free) ── */
+.goodnote-floating-toolbar.horizontal {
+  flex-direction: row;
+  width: fit-content;
+  height: auto;
+  padding: 6px 10px;
+}
+
+/* ── Layout mode: vertical (left/right dock) ── */
+.goodnote-floating-toolbar.vertical {
+  flex-direction: column !important;
+  width: 44px;
+  height: fit-content;
+  padding: 10px 6px;
+  gap: 6px;
+}
+
+.goodnote-floating-toolbar.dragging {
+  cursor: grabbing;
+  transition: none;
+}
+
+/* Compact mode — reduced opacity, no size change */
+.goodnote-floating-toolbar.compact {
+  opacity: 0.55;
+  transition: opacity 200ms ease;
+}
+
+.goodnote-floating-toolbar.compact:hover {
+  opacity: 1;
+}
+
+/* Dock classes — visual state markers ONLY, NO position CSS */
+.goodnote-floating-toolbar.dock-left { }
+.goodnote-floating-toolbar.dock-right { }
+.goodnote-floating-toolbar.dock-top { }
+.goodnote-floating-toolbar.dock-bottom { }
+
+/* ============================================
+   Snapping transition — only active during snap,
+   removed immediately so it never affects drag
+   ============================================ */
+
+.goodnote-floating-toolbar.snapping {
+  transition: transform 400ms cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+
+/* ============================================
+   Undock transition — smooth detach from edge
+   ============================================ */
+
+.goodnote-floating-toolbar.undocking {
+  transition: transform 150ms ease-out, opacity 150ms ease-out;
+  opacity: 0.95;
+}
+
+/* 🔒 Toolbar buttons — fixed size, never grow/shrink */
+.goodnote-floating-toolbar button {
+  flex-shrink: 0 !important;
+  flex-grow: 0 !important;
+  width: 32px;
+  height: 32px;
+  border-radius: 8px;
+  border: none;
+  background: transparent;
+  font-size: 16px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  color: var(--text-muted);
+  transition: background-color 120ms ease, color 120ms ease;
+}
+
+.goodnote-floating-toolbar button:hover {
+  background: var(--background-modifier-hover);
+  color: var(--text-normal);
+}
+
+.goodnote-floating-toolbar button.is-active {
+  background: var(--interactive-accent);
+  color: var(--text-on-accent);
+}
+
+/* ============================================
+   SideDrawer — absolute overlay
+   ============================================ */
+
+.goodnote-canvas-drawer {
+  position: absolute;
+  right: 0;
+  top: 0;
+  height: 100%;
+  width: 300px;
+  z-index: 20;
+  flex: none !important;
+  overflow-y: auto;
+  overflow-x: hidden;
+  background: var(--background-secondary);
+  border-left: 1px solid var(--background-modifier-border);
+  transform: translateX(100%);
+  transition: transform 300ms ease;
+  padding: 0;
+  pointer-events: auto;
+}
+
+.goodnote-canvas-drawer.is-visible {
+  transform: translateX(0);
+  padding: 12px;
+}
+
+.goodnote-canvas-drawer h4 {
+  margin: 0 0 10px 0;
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--text-normal);
+}
+
+/* Preset buttons */
+
+.goodnote-drawer-presets {
+  display: flex;
+  gap: 6px;
+  margin-bottom: 20px;
+}
+
+.goodnote-drawer-presets button {
+  flex: 1;
+  font-size: 11px;
+  font-weight: 600;
+  padding: 7px 0;
+  background: transparent;
+  border: 1px solid var(--background-modifier-border);
+  border-radius: 8px;
+  color: var(--text-muted);
+  cursor: pointer;
+  transition: all 150ms ease;
+}
+
+.goodnote-drawer-presets button:hover {
+  background: var(--interactive-accent);
+  color: var(--text-on-accent);
+  border-color: var(--interactive-accent);
+}
+
+/* Active state for drawer segmented controls (Pen presets / Eraser modes) */
+.goodnote-drawer-presets button.is-active {
+  background: var(--interactive-accent);
+  color: var(--text-on-accent);
+  border-color: var(--interactive-accent);
+}
+
+/* ============================================
+   Settings Panel Sliders (Pen + Eraser)
+   ============================================ */
+
+.goodnote-pen-slider {
+  margin-bottom: 18px;
+}
+
+.goodnote-pen-slider-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  margin-bottom: 5px;
+}
+
+.goodnote-pen-slider-label {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-normal);
+}
+
+.goodnote-pen-slider-hint {
+  font-size: 10px;
+  color: var(--text-faint);
+  font-style: italic;
+}
+
+.goodnote-pen-slider input[type="range"] {
+  width: 100%;
+  margin: 0;
+  accent-color: var(--interactive-accent);
+}

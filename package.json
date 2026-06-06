@@ -1,0 +1,17 @@
+{
+  "name": "obsidian-goodnote-max",
+  "version": "1.0.0",
+  "description": "GoodNote Max - Obsidian plugin",
+  "main": "main.js",
+  "scripts": {
+    "build": "esbuild main.ts --bundle --external:obsidian --platform=browser --format=cjs --outfile=main.js"
+  },
+  "devDependencies": {
+    "esbuild": "^0.20.0",
+    "obsidian": "^1.4.0",
+    "typescript": "^5.3.0"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC"
+}

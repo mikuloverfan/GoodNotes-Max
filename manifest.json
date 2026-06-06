@@ -1,0 +1,9 @@
+{
+  "id": "goodnote-max",
+  "name": "GoodNote Max",
+  "version": "1.0.0",
+  "minAppVersion": "0.15.0",
+  "description": "Minimal plugin: ribbon button + Notice.",
+  "author": "Your Name",
+  "isDesktopOnly": false
+}
