@@ -100,11 +100,12 @@ function migratePage(raw) {
   };
 }
 var CursorRenderer = class {
-  constructor(session) {
+  constructor(session, ownerDocument) {
     this._unsub = null;
     this._mounted = false;
     this._session = null;
     this._session = session;
+    this._doc = ownerDocument ?? document;
   }
   /** Bind or rebind session. Safe to call multiple times. */
   bindSession(session) {
@@ -123,19 +124,19 @@ var CursorRenderer = class {
     if (this._mounted)
       return;
     this._mounted = true;
-    const existing = document.querySelector(".goodnote-cursor-overlay");
+    const existing = this._doc.querySelector(".goodnote-cursor-overlay");
     if (existing)
       existing.remove();
-    this.el = document.body.createEl("div", { cls: "goodnote-cursor-overlay" });
+    this.el = this._doc.body.createEl("div", { cls: "goodnote-cursor-overlay" });
     if (this._session) {
       this._subscribeViewState();
     }
     this._onGlobalPointerMove = (ev) => {
-      if (!this.el || !document.body.contains(this.el)) {
-        this.el = document.body.createEl("div", { cls: "goodnote-cursor-overlay" });
+      if (!this.el || !this._doc.body.contains(this.el)) {
+        this.el = this._doc.body.createEl("div", { cls: "goodnote-cursor-overlay" });
       }
-      this.el.style.left = ev.clientX + "px";
-      this.el.style.top = ev.clientY + "px";
+      this.el.style.setProperty("--cursor-x", ev.clientX + "px");
+      this.el.style.setProperty("--cursor-y", ev.clientY + "px");
       this.el.classList.remove("cursor-hidden");
       if (this._session) {
         const vs = this._session.viewState.cursor;
@@ -152,7 +153,7 @@ var CursorRenderer = class {
         this._session.viewState.cursor.visible = false;
       }
     };
-    document.addEventListener("pointerleave", this._onGlobalPointerLeave);
+    this._doc.addEventListener("pointerleave", this._onGlobalPointerLeave);
   }
   /** Subscribe to session viewState for tool-driven appearance. */
   _subscribeViewState() {
@@ -160,24 +161,21 @@ var CursorRenderer = class {
     if (!session)
       return;
     this._unsub = session.subscribeViewUI((vs) => {
-      if (!this.el || !document.body.contains(this.el))
+      if (!this.el || !this._doc.body.contains(this.el))
         return;
       this.el.classList.remove("cursor-pen", "cursor-eraser", "cursor-hand", "cursor-hand-grabbing");
-      this.el.style.width = "";
-      this.el.style.height = "";
+      this.el.style.removeProperty("--cursor-size");
       this.el.textContent = "";
       const cs = vs.cursor;
       const sizePx = Math.round(cs.size);
       switch (cs.mode) {
         case "pen":
           this.el.classList.add("cursor-pen");
-          this.el.style.width = sizePx + "px";
-          this.el.style.height = sizePx + "px";
+          this.el.style.setProperty("--cursor-size", sizePx + "px");
           break;
         case "eraser":
           this.el.classList.add("cursor-eraser");
-          this.el.style.width = sizePx + "px";
-          this.el.style.height = sizePx + "px";
+          this.el.style.setProperty("--cursor-size", sizePx + "px");
           break;
         case "hand":
           this.el.classList.add("cursor-hand");
@@ -202,8 +200,8 @@ var CursorRenderer = class {
     if (this._onGlobalPointerMove)
       window.removeEventListener("pointermove", this._onGlobalPointerMove);
     if (this._onGlobalPointerLeave)
-      document.removeEventListener("pointerleave", this._onGlobalPointerLeave);
-    if (this.el && document.body.contains(this.el))
+      this._doc.removeEventListener("pointerleave", this._onGlobalPointerLeave);
+    if (this.el && this._doc.body.contains(this.el))
       this.el.remove();
     this._session = null;
   }
@@ -709,7 +707,6 @@ var NotebookView = class extends import_obsidian.ItemView {
         ev.preventDefault();
         new import_obsidian.Menu().addItem((i) => i.setTitle(nb.isPinned ? "Unpin" : "Pin").setIcon("pin").onClick(() => this.plugin.togglePinNotebook(nb.id))).addItem((i) => i.setTitle("Rename").setIcon("pencil").onClick(() => new NotebookRenameModal(this.plugin.app, this.plugin, nb.id, nb.name).open())).addItem((i) => i.setTitle("Delete").setIcon("trash").onClick(() => this.plugin.deleteNotebook(nb.id))).showAtMouseEvent(ev);
       });
-      li.style.cursor = "pointer";
       li.onclick = () => {
         new import_obsidian.Notice(`\u{1F4D2} ${nb.name}`);
         this.plugin.ui.selectNotebook(nb.id);
@@ -1506,7 +1503,7 @@ var CanvasRuntimeEngine = class {
   /** 同步提交 — emit commit event（用于切页前 flush） */
   commitNow() {
     if (this.commitTimer) {
-      clearTimeout(this.commitTimer);
+      window.clearTimeout(this.commitTimer);
       this.commitTimer = null;
     }
     this.emitCommit();
@@ -1514,7 +1511,7 @@ var CanvasRuntimeEngine = class {
   /** 异步提交 — debounce 80ms（正常绘制路径） */
   commit() {
     if (this.commitTimer)
-      clearTimeout(this.commitTimer);
+      window.clearTimeout(this.commitTimer);
     this.commitTimer = window.setTimeout(() => this.emitCommit(), 80);
   }
   /** Fire commit event with current state. Subscribers handle persistence. */
@@ -1527,7 +1524,7 @@ var CanvasRuntimeEngine = class {
   }
   reset() {
     if (this.commitTimer)
-      clearTimeout(this.commitTimer);
+      window.clearTimeout(this.commitTimer);
     this.notebookId = "";
     this.pageId = "";
     this.strokes = [];
@@ -1536,7 +1533,7 @@ var CanvasRuntimeEngine = class {
   }
   detach() {
     if (this.commitTimer)
-      clearTimeout(this.commitTimer);
+      window.clearTimeout(this.commitTimer);
     this.isDrawing = false;
     this.currentStroke = null;
   }
@@ -1792,7 +1789,7 @@ var RenderScheduler = class {
       return;
     if (!this._running)
       return;
-    this.rafId = requestAnimationFrame(() => {
+    this.rafId = window.requestAnimationFrame(() => {
       this.rafId = null;
       if (!this._running)
         return;
@@ -1807,7 +1804,7 @@ var RenderScheduler = class {
   stop() {
     this._running = false;
     if (this.rafId !== null) {
-      cancelAnimationFrame(this.rafId);
+      window.cancelAnimationFrame(this.rafId);
       this.rafId = null;
     }
   }
@@ -2202,7 +2199,7 @@ var CanvasSession = class {
       const page2 = nb2?.pages.find((p) => p.id === payload.pageId);
       if (!nb2 || !page2)
         return;
-      page2.strokes = payload.strokes;
+      page2.strokes = payload.strokes ?? [];
       page2.updatedAt = (/* @__PURE__ */ new Date()).toISOString();
       plugin.isInternalWrite = true;
       try {
@@ -2297,17 +2294,18 @@ var CanvasSession = class {
     if (this.canvasEl) {
       this.canvasEl.parentElement?.remove();
     }
-    this.engine = null;
-    this.viewport = null;
-    this.canvasEl = null;
-    this.ctx = null;
-    this.replayCtrl = null;
-    this._onResize = null;
+    const self = this;
+    self.engine = null;
+    self.viewport = null;
+    self.canvasEl = null;
+    self.ctx = null;
+    self.replayCtrl = null;
+    self._onResize = null;
     console.log("[SESSION] \u{1F480} fully destroyed \u2014 all references nulled, all listeners removed");
   }
   // ---- size ----
   applySize() {
-    requestAnimationFrame(() => {
+    window.requestAnimationFrame(() => {
       if (!this.alive)
         return;
       const rect = this.canvasEl.getBoundingClientRect();
@@ -2319,8 +2317,8 @@ var CanvasSession = class {
       const dpr = window.devicePixelRatio || 1;
       this.canvasEl.width = Math.round(w * dpr);
       this.canvasEl.height = Math.round(h * dpr);
-      this.canvasEl.style.width = w + "px";
-      this.canvasEl.style.height = h + "px";
+      this.canvasEl.style.setProperty("--canvas-css-w", w + "px");
+      this.canvasEl.style.setProperty("--canvas-css-h", h + "px");
       this.viewport.update(w, h, dpr);
     });
   }
@@ -2550,7 +2548,8 @@ var CanvasView = class _CanvasView extends import_obsidian.ItemView {
     );
     this.session = new CanvasSession(notebookId, pageId, this.plugin, this.canvasAreaEl);
     CanvasSessionRegistry.getInstance().register(this.session);
-    const canvasCount = document.querySelectorAll("canvas").length;
+    const ownerDoc = this.containerEl.ownerDocument;
+    const canvasCount = ownerDoc.querySelectorAll("canvas").length;
     if (canvasCount !== 1) {
       console.error(`\u274C Canvas count = ${canvasCount}, expected 1 \u2014 destroying and recreating`);
       CanvasSessionRegistry.getInstance().deregister();
@@ -2558,13 +2557,13 @@ var CanvasView = class _CanvasView extends import_obsidian.ItemView {
       this.canvasAreaEl.empty();
       this.session = new CanvasSession(notebookId, pageId, this.plugin, this.canvasAreaEl);
       CanvasSessionRegistry.getInstance().register(this.session);
-      console.assert(document.querySelectorAll("canvas").length === 1, "\u274C FAILED: Multiple canvases after retry");
+      console.assert(ownerDoc.querySelectorAll("canvas").length === 1, "\u274C FAILED: Multiple canvases after retry");
     }
     if (this.cursorRenderer) {
       this.cursorRenderer.bindSession(this.session);
       this.cursorRenderer.mount();
     }
-    requestAnimationFrame(() => {
+    window.requestAnimationFrame(() => {
       const r = this.layoutEl.getBoundingClientRect();
       this.ts.viewportW = r.width;
       this.ts.viewportH = r.height;
@@ -2580,7 +2579,7 @@ var CanvasView = class _CanvasView extends import_obsidian.ItemView {
       console.log("[SESSION] \u{1F480} destroyed");
       this.session = null;
     }
-    const remainingCanvases = document.querySelectorAll("canvas").length;
+    const remainingCanvases = this.containerEl.ownerDocument.querySelectorAll("canvas").length;
     if (remainingCanvases > 0) {
       console.warn(`\u26A0\uFE0F [GHOST] Orphan canvas detected after destroySession: ${remainingCanvases} remaining`);
     }
@@ -2619,7 +2618,7 @@ var CanvasView = class _CanvasView extends import_obsidian.ItemView {
       }, 150);
     });
     this._resizeObserver.observe(this.layoutEl);
-    requestAnimationFrame(() => {
+    window.requestAnimationFrame(() => {
       const r = this.layoutEl.getBoundingClientRect();
       this.ts.viewportW = r.width;
       this.ts.viewportH = r.height;
@@ -2630,7 +2629,7 @@ var CanvasView = class _CanvasView extends import_obsidian.ItemView {
       if (ev.key === "Escape" && this.isDrawerOpen)
         this.toggleDrawer();
     });
-    this.cursorRenderer = new CursorRenderer(null);
+    this.cursorRenderer = new CursorRenderer(null, this.containerEl?.ownerDocument);
   }
   // ============================================================
   //  Toolbar State Machine
@@ -2655,16 +2654,13 @@ var CanvasView = class _CanvasView extends import_obsidian.ItemView {
     const isVertical = s.dock === "left" || s.dock === "right";
     this.toolbarEl.classList.remove("horizontal", "vertical");
     this.toolbarEl.classList.add(isVertical ? "vertical" : "horizontal");
-    requestAnimationFrame(() => this.cacheToolbarSize());
+    window.requestAnimationFrame(() => this.cacheToolbarSize());
     const maxX = Math.max(0, s.viewportW - s.toolbarW);
     const maxY = Math.max(0, s.viewportH - s.toolbarH);
     s.x = Math.max(0, Math.min(s.x, maxX));
     s.y = Math.max(0, Math.min(s.y, maxY));
-    this.toolbarEl.style.top = "0px";
-    this.toolbarEl.style.left = "0px";
-    this.toolbarEl.style.right = "";
-    this.toolbarEl.style.bottom = "";
-    this.toolbarEl.style.transform = `translate(${s.x}px, ${s.y}px)`;
+    this.toolbarEl.style.setProperty("--toolbar-x", s.x + "px");
+    this.toolbarEl.style.setProperty("--toolbar-y", s.y + "px");
   }
   /** Cache toolbar intrinsic size — called once after DOM create + after tool switch */
   cacheToolbarSize() {
@@ -2712,7 +2708,7 @@ var CanvasView = class _CanvasView extends import_obsidian.ItemView {
         this.session?.setTool(t.k);
         this.updateToolbarState();
         this.buildDrawer(this.drawerEl);
-        requestAnimationFrame(() => this.cacheToolbarSize());
+        window.requestAnimationFrame(() => this.cacheToolbarSize());
       };
     }
     this.toolbarEl.createEl("button", { text: "\u2699\uFE0F", title: "\u8BBE\u7F6E" }).onclick = () => this.toggleDrawer();
@@ -2720,7 +2716,7 @@ var CanvasView = class _CanvasView extends import_obsidian.ItemView {
       if (ev.target.tagName === "BUTTON")
         return;
       const s = this.ts;
-      this.toolbarEl.style.transition = "none";
+      this.toolbarEl.classList.add("no-transition");
       if (s.dock !== "free") {
         s.dock = "free";
         this.clearDockClasses();
@@ -2735,20 +2731,21 @@ var CanvasView = class _CanvasView extends import_obsidian.ItemView {
       const s = this.ts;
       if (!s.dragging)
         return;
-      this.toolbarEl.style.transition = "none";
+      this.toolbarEl.classList.add("no-transition");
       s.x = ev.clientX - s.dragOx;
       s.y = ev.clientY - s.dragOy;
       const maxX = Math.max(0, s.viewportW - s.toolbarW);
       const maxY = Math.max(0, s.viewportH - s.toolbarH);
       s.x = Math.max(0, Math.min(s.x, maxX));
       s.y = Math.max(0, Math.min(s.y, maxY));
-      this.toolbarEl.style.transform = `translate(${s.x}px, ${s.y}px)`;
+      this.toolbarEl.style.setProperty("--toolbar-x", s.x + "px");
+      this.toolbarEl.style.setProperty("--toolbar-y", s.y + "px");
     };
     this.toolbarEl.onpointerup = () => {
       const s = this.ts;
       s.dragging = false;
       this.toolbarEl.classList.remove("dragging");
-      this.toolbarEl.style.transition = "";
+      this.toolbarEl.classList.remove("no-transition");
       this.smartSnap();
     };
     this.toolbarEl.onmouseenter = () => {
@@ -2811,9 +2808,9 @@ var CanvasView = class _CanvasView extends import_obsidian.ItemView {
     s.dock = bestEdge;
     this.toolbarEl.classList.add("dock-" + bestEdge, "compact", "snapping");
     this.applyToolbarState();
-    setTimeout(() => {
+    window.setTimeout(() => {
       this.toolbarEl.classList.remove("snapping");
-      this.toolbarEl.style.transition = "";
+      this.toolbarEl.classList.remove("no-transition");
     }, 420);
   }
   updateToolbarState() {

@@ -1,9 +1,10 @@
-import { Plugin, Modal, Setting, ItemView, WorkspaceLeaf, Menu, Notice } from 'obsidian';
+import { App, Plugin, Modal, Setting, ItemView, WorkspaceLeaf, Menu, Notice } from 'obsidian';
 
 // ============================================================
 //  World Coordinate Lock — 禁止任何缩放重算
 // ============================================================
 
+/** @reserved — future world-coordinate enforcement flag */
 const WORLD_LOCK = true;
 
 // ============================================================
@@ -22,6 +23,7 @@ const CANVAS_CONSTANTS = {
 // ============================================================
 //  Data interfaces
 // ============================================================
+
 
 interface StrokeDebug {
   pointCount: number;
@@ -44,6 +46,7 @@ interface StrokePenState {
   lastWidth: number;
 }
 
+/** @reserved — per-stroke modifier pipeline (future style engine) */
 interface StrokeModifiers {
   speed: number;      // motion: 唯一动态源
   taper: number;      // style: 仅形状微调
@@ -198,6 +201,8 @@ interface Page {
 //  旧数据迁移 — 将旧版 Page 升级为完整 PageData
 // ============================================================
 
+/** JSON migration boundary — `any` is appropriate for deserialized data of unknown shape. */
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
 function migratePage(raw: any): Page {
   return {
     id: raw.id || genId(),
@@ -248,13 +253,15 @@ interface UICursorState {
 class CursorRenderer {
   private el!: HTMLDivElement;
   private _onGlobalPointerMove!: (ev: PointerEvent) => void;
-  private _onGlobalPointerLeave!: (ev: PointerEvent) => void;
+  private _onGlobalPointerLeave!: () => void;
   private _unsub: (() => void) | null = null;
   private _mounted = false;
   private _session: CanvasSession | null = null;
+  private readonly _doc: Document;
 
-  constructor(session: CanvasSession | null) {
+  constructor(session: CanvasSession | null, ownerDocument?: Document) {
     this._session = session;
+    this._doc = ownerDocument ?? document;
   }
 
   /** Bind or rebind session. Safe to call multiple times. */
@@ -275,10 +282,10 @@ class CursorRenderer {
     this._mounted = true;
 
     // Singleton guard — remove any existing cursor overlay
-    const existing = document.querySelector('.goodnote-cursor-overlay');
+    const existing = this._doc.querySelector('.goodnote-cursor-overlay');
     if (existing) existing.remove();
 
-    this.el = document.body.createEl('div', { cls: 'goodnote-cursor-overlay' });
+    this.el = this._doc.body.createEl('div', { cls: 'goodnote-cursor-overlay' });
 
     // Subscribe if session already available
     if (this._session) {
@@ -287,11 +294,11 @@ class CursorRenderer {
 
     // ── Global pointermove (window-level, never disconnected) ──
     this._onGlobalPointerMove = (ev: PointerEvent) => {
-      if (!this.el || !document.body.contains(this.el)) {
-        this.el = document.body.createEl('div', { cls: 'goodnote-cursor-overlay' });
+      if (!this.el || !this._doc.body.contains(this.el)) {
+        this.el = this._doc.body.createEl('div', { cls: 'goodnote-cursor-overlay' });
       }
-      this.el.style.left = ev.clientX + 'px';
-      this.el.style.top = ev.clientY + 'px';
+      this.el.style.setProperty('--cursor-x', ev.clientX + 'px');
+      this.el.style.setProperty('--cursor-y', ev.clientY + 'px');
       this.el.classList.remove('cursor-hidden');
       // Write back to viewState if session available
       if (this._session) {
@@ -310,7 +317,7 @@ class CursorRenderer {
         this._session.viewState.cursor.visible = false;
       }
     };
-    document.addEventListener('pointerleave', this._onGlobalPointerLeave);
+    this._doc.addEventListener('pointerleave', this._onGlobalPointerLeave);
   }
 
   /** Subscribe to session viewState for tool-driven appearance. */
@@ -319,12 +326,11 @@ class CursorRenderer {
     if (!session) return;
 
     this._unsub = session.subscribeViewUI((vs) => {
-      if (!this.el || !document.body.contains(this.el)) return;
+      if (!this.el || !this._doc.body.contains(this.el)) return;
 
       // Reset all tool classes
       this.el.classList.remove('cursor-pen', 'cursor-eraser', 'cursor-hand', 'cursor-hand-grabbing');
-      this.el.style.width = '';
-      this.el.style.height = '';
+      this.el.style.removeProperty('--cursor-size');
       this.el.textContent = '';
 
       const cs = vs.cursor;
@@ -333,13 +339,11 @@ class CursorRenderer {
       switch (cs.mode) {
         case 'pen':
           this.el.classList.add('cursor-pen');
-          this.el.style.width = sizePx + 'px';
-          this.el.style.height = sizePx + 'px';
+          this.el.style.setProperty('--cursor-size', sizePx + 'px');
           break;
         case 'eraser':
           this.el.classList.add('cursor-eraser');
-          this.el.style.width = sizePx + 'px';
-          this.el.style.height = sizePx + 'px';
+          this.el.style.setProperty('--cursor-size', sizePx + 'px');
           break;
         case 'hand':
           this.el.classList.add('cursor-hand');
@@ -364,8 +368,8 @@ class CursorRenderer {
     this._mounted = false;
     if (this._unsub) { this._unsub(); this._unsub = null; }
     if (this._onGlobalPointerMove) window.removeEventListener('pointermove', this._onGlobalPointerMove);
-    if (this._onGlobalPointerLeave) document.removeEventListener('pointerleave', this._onGlobalPointerLeave);
-    if (this.el && document.body.contains(this.el)) this.el.remove();
+    if (this._onGlobalPointerLeave) this._doc.removeEventListener('pointerleave', this._onGlobalPointerLeave);
+    if (this.el && this._doc.body.contains(this.el)) this.el.remove();
     this._session = null;
   }
 }
@@ -733,6 +737,8 @@ interface Notebook {
 }
 
 /** 旧数据迁移 — 将旧版 Notebook 升级 */
+/** JSON migration boundary — `any` is appropriate for deserialized data of unknown shape. */
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
 function migrateNotebook(raw: any): Notebook {
   const now = new Date().toISOString();
   return {
@@ -762,7 +768,7 @@ function genId(): string { return `${++_idCounter}`; }
 class FileGateway {
   private static DIR = 'GoodNoteMax';
 
-  constructor(private app: any) {}
+  constructor(private app: App) {}
 
   /** Normalize: strip double-prefix, backslash→slash, ensure single GoodNoteMax/ prefix. */
   private normalizePath(raw: string): string {
@@ -868,7 +874,7 @@ class FileGateway {
 
 class NotebookModal extends Modal {
   plugin: GoodNoteMaxPlugin;
-  constructor(app: any, plugin: GoodNoteMaxPlugin) { super(app); this.plugin = plugin; }
+  constructor(app: App, plugin: GoodNoteMaxPlugin) { super(app); this.plugin = plugin; }
   onOpen() {
     const { contentEl } = this; contentEl.empty();
     contentEl.createEl('h2', { text: 'Create Notebook' });
@@ -902,7 +908,7 @@ class NotebookModal extends Modal {
 
 class NotebookRenameModal extends Modal {
   plugin: GoodNoteMaxPlugin; nbId: string; cur: string;
-  constructor(app: any, p: GoodNoteMaxPlugin, nbId: string, cur: string) { super(app); this.plugin = p; this.nbId = nbId; this.cur = cur; }
+  constructor(app: App, p: GoodNoteMaxPlugin, nbId: string, cur: string) { super(app); this.plugin = p; this.nbId = nbId; this.cur = cur; }
   onOpen() {
     const { contentEl } = this; contentEl.empty(); contentEl.createEl('h2', { text: 'Rename Notebook' });
     let v = this.cur;
@@ -922,7 +928,7 @@ class NotebookRenameModal extends Modal {
 
 class RenameModal extends Modal {
   plugin: GoodNoteMaxPlugin; nbId: string; pId: string; cur: string;
-  constructor(app: any, p: GoodNoteMaxPlugin, nbId: string, pId: string, cur: string) { super(app); this.plugin = p; this.nbId = nbId; this.pId = pId; this.cur = cur; }
+  constructor(app: App, p: GoodNoteMaxPlugin, nbId: string, pId: string, cur: string) { super(app); this.plugin = p; this.nbId = nbId; this.pId = pId; this.cur = cur; }
   onOpen() {
     const { contentEl } = this; contentEl.empty(); contentEl.createEl('h2', { text: 'Rename Page' });
     let v = this.cur;
@@ -975,7 +981,6 @@ class NotebookView extends ItemView {
           .addItem((i) => i.setTitle('Delete').setIcon('trash').onClick(() => this.plugin.deleteNotebook(nb.id)))
           .showAtMouseEvent(ev);
       });
-      li.style.cursor = 'pointer';
       li.onclick = () => { new Notice(`📒 ${nb.name}`); this.plugin.ui.selectNotebook(nb.id); };
     });
   }
@@ -1313,7 +1318,7 @@ class PageView extends ItemView {
 type CanvasLayoutMode = 'main'; // future: 'split' | 'fullscreen' | 'floating'
 
 class CanvasLayoutManager {
-  constructor(private app: any, private plugin: GoodNoteMaxPlugin) {}
+  constructor(private app: App, private plugin: GoodNoteMaxPlugin) {}
 
   async mountCanvas(notebookId: string, pageId: string, _mode: CanvasLayoutMode = 'main'): Promise<CanvasView> {
     const { workspace } = this.app;
@@ -1720,7 +1725,7 @@ class CanvasRuntimeEngine {
     setCapture(pointerId);
   }
 
-  addPoint(pt: { x: number; y: number }) {
+  addPoint(pt: { x: number; y: number; t?: number; speed?: number }) {
     if (!this.isDrawing || !this.currentStroke) return;
     // Task 6: NaN guard
     if (!Number.isFinite(pt.x) || !Number.isFinite(pt.y)) {
@@ -1783,9 +1788,9 @@ class CanvasRuntimeEngine {
     }
 
     // debug: speed 统计（仅记录，不参与任何计算）
-    if (this.currentStroke.debug && (pt as any).speed != null) {
+    if (this.currentStroke.debug && pt.speed != null) {
       this.currentStroke.debug.avgSpeed =
-        (this.currentStroke.debug.avgSpeed + (pt as any).speed) * 0.5;
+        (this.currentStroke.debug.avgSpeed + pt.speed) * 0.5;
     }
 
     if (count > 0) {
@@ -1798,7 +1803,7 @@ class CanvasRuntimeEngine {
       const dx = pt.x - prev.x;
       const dy = pt.y - prev.y;
       const dist = Math.hypot(dx, dy);
-      const dt = Math.max(1, ((pt as any).t ?? 0) - (prev.t ?? (pt as any).t ?? 0));
+      const dt = Math.max(1, (pt.t ?? 0) - (prev.t ?? pt.t ?? 0));
       const rawSpeed = dist / dt;
       const ps = this.currentStroke.penState;
       ps.lastSpeed = rawSpeed;
@@ -1951,7 +1956,7 @@ class CanvasRuntimeEngine {
   /** 同步提交 — emit commit event（用于切页前 flush） */
   commitNow(): void {
     if (this.commitTimer) {
-      clearTimeout(this.commitTimer);
+      window.clearTimeout(this.commitTimer);
       this.commitTimer = null;
     }
     this.emitCommit();
@@ -1959,7 +1964,7 @@ class CanvasRuntimeEngine {
 
   /** 异步提交 — debounce 80ms（正常绘制路径） */
   commit() {
-    if (this.commitTimer) clearTimeout(this.commitTimer);
+    if (this.commitTimer) window.clearTimeout(this.commitTimer);
     this.commitTimer = window.setTimeout(() => this.emitCommit(), 80);
   }
 
@@ -1973,7 +1978,7 @@ class CanvasRuntimeEngine {
   }
 
   reset() {
-    if (this.commitTimer) clearTimeout(this.commitTimer);
+    if (this.commitTimer) window.clearTimeout(this.commitTimer);
     this.notebookId = '';
     this.pageId = '';
     this.strokes = [];
@@ -1982,7 +1987,7 @@ class CanvasRuntimeEngine {
   }
 
   detach() {
-    if (this.commitTimer) clearTimeout(this.commitTimer);
+    if (this.commitTimer) window.clearTimeout(this.commitTimer);
     this.isDrawing = false;
     this.currentStroke = null;
     // Never clear strokes — data is owned by Page, not Engine.
@@ -2307,7 +2312,7 @@ class RenderScheduler {
   requestRender(): void {
     if (this.rafId !== null) return;
     if (!this._running) return;
-    this.rafId = requestAnimationFrame(() => {
+    this.rafId = window.requestAnimationFrame(() => {
       this.rafId = null;
       if (!this._running) return;
       this._onFrame?.();
@@ -2323,7 +2328,7 @@ class RenderScheduler {
   stop(): void {
     this._running = false;
     if (this.rafId !== null) {
-      cancelAnimationFrame(this.rafId);
+      window.cancelAnimationFrame(this.rafId);
       this.rafId = null;
     }
   }
@@ -2333,6 +2338,7 @@ class RenderScheduler {
 //  RenderQueue — 收集所有渲染输入，提供 batch render
 // ============================================================
 
+/** @reserved — viewport dirty-region optimization (future partial repaint) */
 interface Rect {
   x: number;
   y: number;
@@ -2341,7 +2347,7 @@ interface Rect {
 }
 
 class RenderQueue {
-  renderables: RenderableStroke[] = [];
+  renderables: (RenderableStroke | null)[] = [];
   /** Camera snapshot at queue-build time */
   camera: { x: number; y: number; zoom: number } = { x: 0, y: 0, zoom: 1 };
   /** Canvas buffer dimensions (cssW/cssH * dpr) */
@@ -2445,7 +2451,7 @@ class RenderQueue {
 
       // Update renderable in-place or create new
       while (this.renderables.length <= idx) {
-        this.renderables.push(null as any);
+        this.renderables.push(null);
       }
       this.renderables[idx] = {
         id: s.id, path2D,
@@ -2693,7 +2699,7 @@ class ToolManager {
   }
 
   /** Update settings on a specific tool. */
-  updateSettings(id: string, patch: Partial<any>): boolean {
+  updateSettings(id: string, patch: Record<string, unknown>): boolean {
     const tool = this.tools.get(id);
     if (!tool) return false;
     Object.assign(tool.settings, patch);
@@ -2868,12 +2874,12 @@ syncViewState(): void {
     this.engine.load(notebookId, pageId, strokes);
 
     // ── Subscribe Engine commit → Plugin persistence ──
-    this.engine.on('commit', (payload: any) => {
+    this.engine.on('commit', (payload: { notebookId?: string; pageId?: string; strokes?: Stroke[] }) => {
       if (!payload) return;
       const nb2 = plugin.getNotebooks().find((n: Notebook) => n.id === payload.notebookId);
       const page2 = nb2?.pages.find((p: Page) => p.id === payload.pageId);
       if (!nb2 || !page2) return;
-      page2.strokes = payload.strokes;
+      page2.strokes = payload.strokes ?? [];
       page2.updatedAt = new Date().toISOString();
       plugin.isInternalWrite = true;
       try { plugin.fileGateway.saveNotebook(nb2); }
@@ -2936,19 +2942,20 @@ syncViewState(): void {
     if (this.canvasEl) { this.canvasEl.parentElement?.remove(); }
 
     // ⑤ 强制清空所有引用 — 幽灵防御系统
-    (this as any).engine = null;
-    (this as any).viewport = null;
-    (this as any).canvasEl = null;
-    (this as any).ctx = null;
-    (this as any).replayCtrl = null;
-    (this as any)._onResize = null;
+    const self = this as Record<string, unknown>;
+    self.engine = null;
+    self.viewport = null;
+    self.canvasEl = null;
+    self.ctx = null;
+    self.replayCtrl = null;
+    self._onResize = null;
     console.log('[SESSION] 💀 fully destroyed — all references nulled, all listeners removed');
   }
 
   // ---- size ----
 
   private applySize() {
-    requestAnimationFrame(() => {
+    window.requestAnimationFrame(() => {
       if (!this.alive) return;
       const rect = this.canvasEl.getBoundingClientRect();
       const w = Math.round(rect.width), h = Math.round(rect.height);
@@ -2957,8 +2964,8 @@ syncViewState(): void {
       const dpr = window.devicePixelRatio || 1;
       this.canvasEl.width = Math.round(w * dpr);
       this.canvasEl.height = Math.round(h * dpr);
-      this.canvasEl.style.width = w + 'px';
-      this.canvasEl.style.height = h + 'px';
+      this.canvasEl.style.setProperty('--canvas-css-w', w + 'px');
+      this.canvasEl.style.setProperty('--canvas-css-h', h + 'px');
       this.viewport.update(w, h, dpr);
     });
   }
@@ -3004,7 +3011,7 @@ getActiveToolId(): Tool {
 }
 
 /** Update settings on a specific tool. */
-updateToolSettings(id: string, patch: Record<string, any>): boolean {
+updateToolSettings(id: string, patch: Record<string, unknown>): boolean {
   return this.toolManager.updateSettings(id, patch);
 }
 
@@ -3262,7 +3269,8 @@ class CanvasView extends ItemView {
     CanvasSessionRegistry.getInstance().register(this.session);
 
     // 强制单 canvas 断言 — 如果失败立即 destroy + 重建
-    const canvasCount = document.querySelectorAll('canvas').length;
+    const ownerDoc = this.containerEl.ownerDocument;
+    const canvasCount = ownerDoc.querySelectorAll('canvas').length;
     if (canvasCount !== 1) {
       console.error(`❌ Canvas count = ${canvasCount}, expected 1 — destroying and recreating`);
       CanvasSessionRegistry.getInstance().deregister();
@@ -3270,7 +3278,7 @@ class CanvasView extends ItemView {
       this.canvasAreaEl.empty();
       this.session = new CanvasSession(notebookId, pageId, this.plugin, this.canvasAreaEl);
       CanvasSessionRegistry.getInstance().register(this.session);
-      console.assert(document.querySelectorAll('canvas').length === 1, '❌ FAILED: Multiple canvases after retry');
+      console.assert(ownerDoc.querySelectorAll('canvas').length === 1, '❌ FAILED: Multiple canvases after retry');
     }
 
     // ── Cursor System: bind session and mount (safe: session is now valid) ──
@@ -3280,7 +3288,7 @@ class CanvasView extends ItemView {
     }
 
     // 重定位 toolbar（session 重建后 layout 可能偏移）
-    requestAnimationFrame(() => {
+    window.requestAnimationFrame(() => {
       const r = this.layoutEl.getBoundingClientRect();
       this.ts.viewportW = r.width;
       this.ts.viewportH = r.height;
@@ -3288,7 +3296,7 @@ class CanvasView extends ItemView {
       this.initToolbarPosition();
     });
 
-    console.log('[SESSION] ✅ created', { notebookId, pageId, engineId: (this.session.engine as any).id });
+    console.log('[SESSION] ✅ created', { notebookId, pageId, engineId: this.session.engine.id });
   }
 
   destroySession() {
@@ -3299,7 +3307,7 @@ class CanvasView extends ItemView {
       this.session = null;
     }
     // Ghost check: no orphan canvas
-    const remainingCanvases = document.querySelectorAll('canvas').length;
+    const remainingCanvases = this.containerEl.ownerDocument.querySelectorAll('canvas').length;
     if (remainingCanvases > 0) {
       console.warn(`⚠️ [GHOST] Orphan canvas detected after destroySession: ${remainingCanvases} remaining`);
     }
@@ -3345,7 +3353,7 @@ class CanvasView extends ItemView {
     this._resizeObserver.observe(this.layoutEl);
 
     // Initial viewport cache + position init
-    requestAnimationFrame(() => {
+    window.requestAnimationFrame(() => {
       const r = this.layoutEl.getBoundingClientRect();
       this.ts.viewportW = r.width;
       this.ts.viewportH = r.height;
@@ -3359,7 +3367,7 @@ class CanvasView extends ItemView {
 
     // ── Cursor System v4 — unified CursorRenderer (PS-level brush preview) ──
     // NOTE: mount() is deferred to createSession() — session must exist first
-    this.cursorRenderer = new CursorRenderer(null as any);
+    this.cursorRenderer = new CursorRenderer(null, this.containerEl?.ownerDocument);
   }
 
   // ============================================================
@@ -3389,7 +3397,7 @@ class CanvasView extends ItemView {
     this.toolbarEl.classList.add(isVertical ? "vertical" : "horizontal");
 
     // Re-cache toolbar size (layout change shifts dimensions)
-    requestAnimationFrame(() => this.cacheToolbarSize());
+    window.requestAnimationFrame(() => this.cacheToolbarSize());
 
     // Clamp to viewport bounds
     const maxX = Math.max(0, s.viewportW - s.toolbarW);
@@ -3398,11 +3406,8 @@ class CanvasView extends ItemView {
     s.y = Math.max(0, Math.min(s.y, maxY));
 
     // CSS lockdown — position 仅由 transform 决定
-    this.toolbarEl.style.top = "0px";
-    this.toolbarEl.style.left = "0px";
-    this.toolbarEl.style.right = "";
-    this.toolbarEl.style.bottom = "";
-    this.toolbarEl.style.transform = `translate(${s.x}px, ${s.y}px)`;
+    this.toolbarEl.style.setProperty('--toolbar-x', s.x + 'px');
+    this.toolbarEl.style.setProperty('--toolbar-y', s.y + 'px');
   }
 
   /** Cache toolbar intrinsic size — called once after DOM create + after tool switch */
@@ -3448,7 +3453,7 @@ class CanvasView extends ItemView {
         this.updateToolbarState();
         this.buildDrawer(this.drawerEl);
         // Cursor auto-updates via session.subscribeViewUI — no explicit call needed
-        requestAnimationFrame(() => this.cacheToolbarSize());
+        window.requestAnimationFrame(() => this.cacheToolbarSize());
       };
     }
     this.toolbarEl.createEl("button", { text: "\u2699\uFE0F", title: "设置" }).onclick = () => this.toggleDrawer();
@@ -3459,7 +3464,7 @@ class CanvasView extends ItemView {
       const s = this.ts;
 
       // Lock transition
-      this.toolbarEl.style.transition = "none";
+      this.toolbarEl.classList.add('no-transition');
 
       // Undock: state already has x/y from dock calculation, no DOM read needed
       if (s.dock !== 'free') {
@@ -3478,7 +3483,7 @@ class CanvasView extends ItemView {
     this.toolbarEl.onpointermove = (ev: PointerEvent) => {
       const s = this.ts;
       if (!s.dragging) return;
-      this.toolbarEl.style.transition = "none";
+      this.toolbarEl.classList.add('no-transition');
 
       // Pure math: client coords → state, clamped to cached viewport
       s.x = ev.clientX - s.dragOx;
@@ -3490,14 +3495,15 @@ class CanvasView extends ItemView {
       s.y = Math.max(0, Math.min(s.y, maxY));
 
       // Render
-      this.toolbarEl.style.transform = `translate(${s.x}px, ${s.y}px)`;
+      this.toolbarEl.style.setProperty('--toolbar-x', s.x + 'px');
+      this.toolbarEl.style.setProperty('--toolbar-y', s.y + 'px');
     };
 
     this.toolbarEl.onpointerup = () => {
       const s = this.ts;
       s.dragging = false;
       this.toolbarEl.classList.remove("dragging");
-      this.toolbarEl.style.transition = "";
+      this.toolbarEl.classList.remove('no-transition');
       this.smartSnap();
     };
 
@@ -3573,9 +3579,9 @@ class CanvasView extends ItemView {
     this.applyToolbarState();
 
     // Remove snapping class after animation completes
-    setTimeout(() => {
+    window.setTimeout(() => {
       this.toolbarEl.classList.remove("snapping");
-      this.toolbarEl.style.transition = "";
+      this.toolbarEl.classList.remove('no-transition');
     }, 420);
   }
 
@@ -3861,7 +3867,7 @@ export default class GoodNoteMaxPlugin extends Plugin {
     return true;
   }
 
-  private async handleVaultEvent(type: string, file: any, oldPath?: string) {
+  private async handleVaultEvent(type: string, file: { path?: string }, oldPath?: string) {
     if (!this.safeBootCheck('handleVaultEvent')) return;
     if (this.isInternalRename || this.isInternalWrite) return;
     const path: string = file?.path ?? '';
@@ -3878,8 +3884,8 @@ export default class GoodNoteMaxPlugin extends Plugin {
       console.log('[ENGINE LIFECYCLE]', {
         action: 'VAULT_DELETE',
         matchId: match.id,
-        activeEngineId: (activeCanvas?.session?.engine as any)?.id ?? 'none',
-        activeEngineNotebookId: (activeCanvas?.session?.engine as any)?.notebookId ?? 'none',
+        activeEngineId: activeCanvas?.session?.engine?.id ?? 'none',
+        activeEngineNotebookId: (activeCanvas?.session?.engine as unknown as { notebookId: string })?.notebookId ?? 'none',
       });
       // Bug B Fix: forceReset 清空 CanvasView + engine.reset 清空 strokes
       if (activeCanvas) { activeCanvas.destroySession(); }
@@ -3908,9 +3914,9 @@ export default class GoodNoteMaxPlugin extends Plugin {
         if (!nb.id) return;
         const existing = this.notebooks.find((n) => n.id === nb.id);
         if (!existing) return;
-        if (!nb.updatedAt) nb.updatedAt = Date.now();
-        if ((existing as any).updatedAt && nb.updatedAt < (existing as any).updatedAt) return;
-        nb.updatedAt = Date.now();
+        if (!nb.updatedAt) nb.updatedAt = Date.now() as unknown as string;
+        if (existing.updatedAt && nb.updatedAt < existing.updatedAt) return;
+        nb.updatedAt = Date.now() as unknown as string;
         // P1-4: 保护 strokes — rename 事件也不应覆盖笔迹（与 modify 保持一致）
         const preservedStrokes = existing.pages.map(p => {
           const nbPage = nb.pages?.find((np: Page) => np.id === p.id);
@@ -3930,9 +3936,9 @@ export default class GoodNoteMaxPlugin extends Plugin {
         if (!nb.id) return;
         const existing = this.notebooks.find((n) => n.id === nb.id);
         if (!existing) return;
-        if (!nb.updatedAt) nb.updatedAt = Date.now();
-        if ((existing as any).updatedAt && nb.updatedAt < (existing as any).updatedAt) return;
-        nb.updatedAt = Date.now();
+        if (!nb.updatedAt) nb.updatedAt = Date.now() as unknown as string;
+        if (existing.updatedAt && nb.updatedAt < existing.updatedAt) return;
+        nb.updatedAt = Date.now() as unknown as string;
         // Fix 4: 只合并元数据，保护 strokes 不被 file overwrite 覆盖
         const preservedStrokes = existing.pages.map(p => {
           const nbPage = nb.pages?.find((np: Page) => np.id === p.id);
@@ -3954,8 +3960,8 @@ export default class GoodNoteMaxPlugin extends Plugin {
     console.log('[ENGINE LIFECYCLE]', {
       action: 'DELETE_NOTEBOOK',
       notebookId: id,
-      activeEngineId: (activeCanvas?.session?.engine as any)?.id ?? 'none',
-      activeEngineNotebookId: (activeCanvas?.session?.engine as any)?.notebookId ?? 'none',
+      activeEngineId: activeCanvas?.session?.engine?.id ?? 'none',
+      activeEngineNotebookId: (activeCanvas?.session?.engine as unknown as { notebookId: string })?.notebookId ?? 'none',
     });
     await this.fileGateway.deleteNotebook(nb);
     this.notebooks = this.notebooks.filter((n) => n.id !== id);
