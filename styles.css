@@ -21,7 +21,7 @@
   transform: translate(var(--toolbar-x, 0px), var(--toolbar-y, 0px));
 }
 .goodnote-floating-toolbar.no-transition {
-  transition: none !important;
+  transition: none;
 }
 
 /* --- View container — safe padding --- */

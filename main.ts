@@ -1,13 +1,6 @@
 import { App, Plugin, Modal, Setting, ItemView, WorkspaceLeaf, Menu, Notice } from 'obsidian';
 
 // ============================================================
-//  World Coordinate Lock — 禁止任何缩放重算
-// ============================================================
-
-/** @reserved — future world-coordinate enforcement flag */
-const WORLD_LOCK = true;
-
-// ============================================================
 //  Phase 2-A: Constants Layer — 所有魔法数字集中管理
 // ============================================================
 
@@ -46,12 +39,7 @@ interface StrokePenState {
   lastWidth: number;
 }
 
-/** @reserved — per-stroke modifier pipeline (future style engine) */
-interface StrokeModifiers {
-  speed: number;      // motion: 唯一动态源
-  taper: number;      // style: 仅形状微调
-  modeFactor: number; // style: UI 微调
-}
+// reserved for future — per-stroke modifier pipeline
 
 interface Stroke {
   id: string;
@@ -201,18 +189,18 @@ interface Page {
 //  旧数据迁移 — 将旧版 Page 升级为完整 PageData
 // ============================================================
 
-/** JSON migration boundary — `any` is appropriate for deserialized data of unknown shape. */
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-function migratePage(raw: any): Page {
+/** JSON migration boundary — uses `unknown` for deserialized data of unknown shape. */
+function migratePage(raw: unknown): Page {
+  const r = raw as Record<string, unknown>;
   return {
-    id: raw.id || genId(),
-    title: raw.title || 'Untitled',
-    index: raw.index ?? 0,
-    strokes: raw.strokes || raw.content?.strokes || [],
-    background: raw.background || { type: 'blank' as const, color: '#ffffff' },
-    createdAt: raw.createdAt || new Date().toISOString(),
-    updatedAt: raw.updatedAt || new Date().toISOString(),
-    thumbnail: raw.thumbnail,
+    id: (r.id as string) || genId(),
+    title: (r.title as string) || 'Untitled',
+    index: (r.index as number) ?? 0,
+    strokes: (r.strokes as Stroke[]) || ((r.content as { strokes?: Stroke[] } | undefined)?.strokes) || [],
+    background: (r.background as PageBackground) || { type: 'blank' as const, color: '#ffffff' },
+    createdAt: (r.createdAt as string) || new Date().toISOString(),
+    updatedAt: (r.updatedAt as string) || new Date().toISOString(),
+    thumbnail: r.thumbnail as string | undefined,
   };
 }
 
@@ -261,7 +249,7 @@ class CursorRenderer {
 
   constructor(session: CanvasSession | null, ownerDocument?: Document) {
     this._session = session;
-    this._doc = ownerDocument ?? document;
+    this._doc = ownerDocument ?? (globalThis as unknown as { activeDocument?: Document }).activeDocument ?? document;
   }
 
   /** Bind or rebind session. Safe to call multiple times. */
@@ -737,20 +725,20 @@ interface Notebook {
 }
 
 /** 旧数据迁移 — 将旧版 Notebook 升级 */
-/** JSON migration boundary — `any` is appropriate for deserialized data of unknown shape. */
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-function migrateNotebook(raw: any): Notebook {
+/** JSON migration boundary — uses `unknown` for deserialized data of unknown shape. */
+function migrateNotebook(raw: unknown): Notebook {
+  const r = raw as Record<string, unknown>;
   const now = new Date().toISOString();
   return {
-    id: raw.id || genId(),
-    name: raw.name || 'Untitled',
-    pages: (raw.pages || []).map((p: any) => migratePage(p)),
-    activePageId: raw.activePageId ?? (raw.pages?.[0]?.id ?? null),
-    nextPageIndex: raw.nextPageIndex ?? (raw.pages?.length ?? 0),
-    createdAt: raw.createdAt || now,
-    updatedAt: raw.updatedAt || now,
-    lastPageId: raw.lastPageId,
-    isPinned: raw.isPinned,
+    id: (r.id as string) || genId(),
+    name: (r.name as string) || 'Untitled',
+    pages: ((r.pages as unknown[]) || []).map((p: unknown) => migratePage(p)),
+    activePageId: (r.activePageId as string | null) ?? ((r.pages as unknown[])?.[0] as { id?: string } | undefined)?.id ?? null,
+    nextPageIndex: (r.nextPageIndex as number) ?? ((r.pages as unknown[])?.length ?? 0),
+    createdAt: (r.createdAt as string) || now,
+    updatedAt: (r.updatedAt as string) || now,
+    lastPageId: r.lastPageId as string | undefined,
+    isPinned: r.isPinned as boolean | undefined,
   };
 }
 
@@ -1626,17 +1614,17 @@ class CanvasRuntimeEngine {
   //  Event System — lightweight pub/sub, zero external deps
   // ============================================================
 
-  private _listeners = new Map<string, Array<(...args: any[]) => void>>();
+  private _listeners = new Map<string, Array<(...args: unknown[]) => void>>();
 
   /** Subscribe to an engine event. Returns unsubscribe function. */
-  on(event: string, fn: (...args: any[]) => void): () => void {
+  on(event: string, fn: (...args: unknown[]) => void): () => void {
     if (!this._listeners.has(event)) this._listeners.set(event, []);
     this._listeners.get(event)!.push(fn);
     return () => this.off(event, fn);
   }
 
   /** Unsubscribe a specific handler from an event. */
-  off(event: string, fn: (...args: any[]) => void): void {
+  off(event: string, fn: (...args: unknown[]) => void): void {
     const arr = this._listeners.get(event);
     if (!arr) return;
     const idx = arr.indexOf(fn);
@@ -1644,7 +1632,7 @@ class CanvasRuntimeEngine {
   }
 
   /** Emit an event with optional payload. Engine never knows who listens. */
-  private emit(event: string, payload?: any): void {
+  private emit(event: string, payload?: unknown): void {
     const arr = this._listeners.get(event);
     if (!arr) return;
     for (const fn of arr) fn(payload);
@@ -2338,13 +2326,7 @@ class RenderScheduler {
 //  RenderQueue — 收集所有渲染输入，提供 batch render
 // ============================================================
 
-/** @reserved — viewport dirty-region optimization (future partial repaint) */
-interface Rect {
-  x: number;
-  y: number;
-  w: number;
-  h: number;
-}
+// reserved for future — viewport dirty-region optimization
 
 class RenderQueue {
   renderables: (RenderableStroke | null)[] = [];
@@ -2874,7 +2856,8 @@ syncViewState(): void {
     this.engine.load(notebookId, pageId, strokes);
 
     // ── Subscribe Engine commit → Plugin persistence ──
-    this.engine.on('commit', (payload: { notebookId?: string; pageId?: string; strokes?: Stroke[] }) => {
+    this.engine.on('commit', (raw: unknown) => {
+      const payload = raw as { notebookId?: string; pageId?: string; strokes?: Stroke[] } | undefined;
       if (!payload) return;
       const nb2 = plugin.getNotebooks().find((n: Notebook) => n.id === payload.notebookId);
       const page2 = nb2?.pages.find((p: Page) => p.id === payload.pageId);
@@ -4068,7 +4051,7 @@ export default class GoodNoteMaxPlugin extends Plugin {
     // ==========================================================
     window.setInterval(() => {
       const registry = CanvasSessionRegistry.getInstance();
-      const canvasCount = document.querySelectorAll('canvas').length;
+      const canvasCount = ((globalThis as unknown as { activeDocument?: Document }).activeDocument ?? document).querySelectorAll('canvas').length;
       const sessionAlive = !!(registry.activeSession && !registry.activeSession.destroyed);
 
       console.assert(sessionAlive || canvasCount === 0,
