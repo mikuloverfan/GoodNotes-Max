@@ -1315,7 +1315,7 @@ class CanvasLayoutManager {
       leaf = workspace.getLeaf(false);
       await leaf.setViewState({ type: CANVAS_VIEW_TYPE, active: true });
     } else {
-      workspace.revealLeaf(leaf);
+      workspace.setActiveLeaf(leaf, { focus: true });
     }
     const view = leaf.view as CanvasView;
     view.createSession(notebookId, pageId);
@@ -4076,9 +4076,9 @@ export default class GoodNoteMaxPlugin extends Plugin {
     const { workspace } = this.app;
     let l = workspace.getLeavesOfType(NOTEBOOK_VIEW_TYPE)[0];
     if (!l) { const leaf = workspace.getLeftLeaf(false); if (leaf) await leaf.setViewState({ type: NOTEBOOK_VIEW_TYPE, active: true }); }
-    else workspace.revealLeaf(l);
+    else workspace.setActiveLeaf(l, { focus: true });
     let r = workspace.getLeavesOfType(PAGE_VIEW_TYPE)[0];
     if (!r) { const leaf = workspace.getRightLeaf(false); if (leaf) await leaf.setViewState({ type: PAGE_VIEW_TYPE, active: true }); }
-    else workspace.revealLeaf(r);
+    else workspace.setActiveLeaf(r, { focus: true });
   }
 }
