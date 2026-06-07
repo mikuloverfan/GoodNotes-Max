@@ -106,7 +106,7 @@ var CursorRenderer = class {
     this._mounted = false;
     this._session = null;
     this._session = session;
-    this._doc = ownerDocument ?? globalThis.activeDocument ?? document;
+    this._doc = ownerDocument ?? activeDocument;
   }
   /** Bind or rebind session. Safe to call multiple times. */
   bindSession(session) {
@@ -509,7 +509,8 @@ var FileGateway = class _FileGateway {
       console.warn("[BOOT] adapter.exists failed:", e);
       try {
         await this.app.vault.createFolder(dir);
-      } catch (_) {
+      } catch (e2) {
+        console.debug(e2);
       }
       return [];
     }
@@ -583,31 +584,34 @@ var NotebookModal = class extends import_obsidian.Modal {
     new import_obsidian.Setting(contentEl).setName("Notebook name").addText((t) => t.setPlaceholder("Enter notebook name").onChange((v) => {
       name = v;
     }));
-    new import_obsidian.Setting(contentEl).addButton((b) => b.setButtonText("Create").setCta().onClick(async () => {
-      try {
-        const now = (/* @__PURE__ */ new Date()).toISOString();
-        await this.plugin.addNotebook({
-          id: genId(),
-          name: name || "Untitled",
-          pages: [{
-            id: "page-1",
-            title: "Page 1",
-            index: 0,
-            strokes: [],
-            background: { type: "blank", color: "#ffffff" },
+    new import_obsidian.Setting(contentEl).addButton((b) => b.setButtonText("Create").setCta().onClick(() => {
+      (async () => {
+        try {
+          const now = (/* @__PURE__ */ new Date()).toISOString();
+          await this.plugin.addNotebook({
+            id: genId(),
+            name: name || "Untitled",
+            pages: [{
+              id: "page-1",
+              title: "Page 1",
+              index: 0,
+              strokes: [],
+              background: { type: "blank", color: "#ffffff" },
+              createdAt: now,
+              updatedAt: now
+            }],
+            activePageId: "page-1",
+            nextPageIndex: 1,
             createdAt: now,
             updatedAt: now
-          }],
-          activePageId: "page-1",
-          nextPageIndex: 1,
-          createdAt: now,
-          updatedAt: now
-        });
-      } catch (e) {
-        console.error(e);
-      } finally {
-        this.close();
-      }
+          });
+        } catch (e) {
+          console.error(e);
+        } finally {
+          this.close();
+        }
+      })().catch(() => {
+      });
     })).addButton((b) => b.setButtonText("Cancel").onClick(() => this.close()));
   }
   onClose() {
@@ -629,7 +633,7 @@ var NotebookRenameModal = class extends import_obsidian.Modal {
     new import_obsidian.Setting(contentEl).setName("Notebook name").addText((t) => t.setValue(this.cur).onChange((x) => v = x));
     new import_obsidian.Setting(contentEl).addButton((b) => b.setButtonText("Rename").setCta().onClick(() => {
       try {
-        this.plugin.renameNotebook(this.nbId, v || this.cur);
+        void this.plugin.renameNotebook(this.nbId, v || this.cur);
       } catch (e) {
         console.error(e);
       } finally {
@@ -655,14 +659,17 @@ var RenameModal = class extends import_obsidian.Modal {
     contentEl.createEl("h2", { text: "Rename Page" });
     let v = this.cur;
     new import_obsidian.Setting(contentEl).setName("Page title").addText((t) => t.setValue(this.cur).onChange((x) => v = x));
-    new import_obsidian.Setting(contentEl).addButton((b) => b.setButtonText("Rename").setCta().onClick(async () => {
-      try {
-        await this.plugin.renamePage(this.nbId, this.pId, v || this.cur);
-      } catch (e) {
-        console.error(e);
-      } finally {
-        this.close();
-      }
+    new import_obsidian.Setting(contentEl).addButton((b) => b.setButtonText("Rename").setCta().onClick(() => {
+      (async () => {
+        try {
+          await this.plugin.renamePage(this.nbId, this.pId, v || this.cur);
+        } catch (e) {
+          console.error(e);
+        } finally {
+          this.close();
+        }
+      })().catch(() => {
+      });
     })).addButton((b) => b.setButtonText("Cancel").onClick(() => this.close()));
   }
   onClose() {
@@ -704,10 +711,14 @@ var NotebookView = class extends import_obsidian.ItemView {
       if (nb.id === sid)
         li.addClass("is-selected");
       li.createSpan({ text: `${nb.isPinned ? "\u{1F4CC}" : "\u{1F4D2}"} ${nb.name}` });
-      li.createEl("button", { text: "\u{1F5D1}" }).onclick = () => this.plugin.deleteNotebook(nb.id);
+      li.createEl("button", { text: "\u{1F5D1}" }).onclick = () => {
+        void this.plugin.deleteNotebook(nb.id);
+      };
       li.addEventListener("contextmenu", (ev) => {
         ev.preventDefault();
-        new import_obsidian.Menu().addItem((i) => i.setTitle(nb.isPinned ? "Unpin" : "Pin").setIcon("pin").onClick(() => this.plugin.togglePinNotebook(nb.id))).addItem((i) => i.setTitle("Rename").setIcon("pencil").onClick(() => new NotebookRenameModal(this.plugin.app, this.plugin, nb.id, nb.name).open())).addItem((i) => i.setTitle("Delete").setIcon("trash").onClick(() => this.plugin.deleteNotebook(nb.id))).showAtMouseEvent(ev);
+        new import_obsidian.Menu().addItem((i) => i.setTitle(nb.isPinned ? "Unpin" : "Pin").setIcon("pin").onClick(() => this.plugin.togglePinNotebook(nb.id))).addItem((i) => i.setTitle("Rename").setIcon("pencil").onClick(() => new NotebookRenameModal(this.plugin.app, this.plugin, nb.id, nb.name).open())).addItem((i) => i.setTitle("Delete").setIcon("trash").onClick(() => {
+          void this.plugin.deleteNotebook(nb.id);
+        })).showAtMouseEvent(ev);
       });
       li.onclick = () => {
         new import_obsidian.Notice(`\u{1F4D2} ${nb.name}`);
@@ -1020,7 +1031,7 @@ var PageManager = class {
     nb.activePageId = page.id;
     nb.updatedAt = now;
     this.plugin.requestPageChange(notebookId, page.id);
-    this.saveNotebook(nb);
+    void this.saveNotebook(nb);
     return page;
   }
   /**
@@ -1049,7 +1060,7 @@ var PageManager = class {
         this.plugin.requestPageChange(notebookId, "");
       }
     }
-    this.saveNotebook(nb);
+    void this.saveNotebook(nb);
     return true;
   }
   /**
@@ -1084,7 +1095,7 @@ var PageManager = class {
       page.thumbnail = patch.thumbnail;
     page.updatedAt = (/* @__PURE__ */ new Date()).toISOString();
     nb.updatedAt = page.updatedAt;
-    this.saveNotebook(nb);
+    void this.saveNotebook(nb);
     return true;
   }
   /**
@@ -1104,7 +1115,7 @@ var PageManager = class {
     if (nb.activePageId === pageId) {
       this.plugin.requestPageChange(notebookId, pageId);
     }
-    this.saveNotebook(nb);
+    void this.saveNotebook(nb);
     return true;
   }
   // ============ 排序 ============
@@ -1122,7 +1133,7 @@ var PageManager = class {
       p.index = i;
     });
     nb.updatedAt = (/* @__PURE__ */ new Date()).toISOString();
-    this.saveNotebook(nb);
+    void this.saveNotebook(nb);
     return true;
   }
   /** 深拷贝 page（新 ID + 深拷贝 strokes） */
@@ -1147,7 +1158,7 @@ var PageManager = class {
     nb.pages.push(copy);
     nb.nextPageIndex = nb.pages.length;
     nb.updatedAt = now;
-    this.saveNotebook(nb);
+    void this.saveNotebook(nb);
     this.switchPage(notebookId, copy.id);
     return copy;
   }
@@ -3070,7 +3081,7 @@ var GoodNoteMaxPlugin = class extends import_obsidian.Plugin {
     if (!nb)
       return;
     nb.isPinned = !nb.isPinned;
-    this.fileGateway.saveNotebook(nb);
+    void this.fileGateway.saveNotebook(nb);
     this.emit("notebooks-changed");
   }
   async resolveNotebookPath(id) {
@@ -3081,7 +3092,8 @@ var GoodNoteMaxPlugin = class extends import_obsidian.Plugin {
         const raw = await adapter.read(f);
         if (JSON.parse(raw).id === id)
           return f;
-      } catch (_) {
+      } catch (e) {
+        console.debug(e);
       }
     }
     return void 0;
@@ -3165,7 +3177,8 @@ var GoodNoteMaxPlugin = class extends import_obsidian.Plugin {
           nb.updatedAt = Date.now();
         this.notebooks.push(nb);
         this.emit("notebooks-changed");
-      } catch (_) {
+      } catch (e) {
+        console.debug(e);
       }
       return;
     }
@@ -3190,7 +3203,8 @@ var GoodNoteMaxPlugin = class extends import_obsidian.Plugin {
         Object.assign(existing, nb);
         existing.pages = preservedStrokes;
         this.emit("notebooks-changed");
-      } catch (_) {
+      } catch (e) {
+        console.debug(e);
       }
       return;
     }
@@ -3215,7 +3229,8 @@ var GoodNoteMaxPlugin = class extends import_obsidian.Plugin {
         Object.assign(existing, nb);
         existing.pages = preservedStrokes;
         this.emit("notebooks-changed");
-      } catch (_) {
+      } catch (e) {
+        console.debug(e);
       }
       return;
     }
@@ -3255,7 +3270,7 @@ var GoodNoteMaxPlugin = class extends import_obsidian.Plugin {
     if (!nb)
       return;
     nb.lastPageId = pId;
-    this.fileGateway.saveNotebook(nb);
+    void this.fileGateway.saveNotebook(nb);
   }
   /**
    * 单向调度：Page 数据变更 → Session 状态重建。
@@ -3324,7 +3339,7 @@ var GoodNoteMaxPlugin = class extends import_obsidian.Plugin {
     vault.on("modify", (file) => this.handleVaultEvent("modify", file));
     window.setInterval(() => {
       const registry = CanvasSessionRegistry.getInstance();
-      const canvasCount = (globalThis.activeDocument ?? document).querySelectorAll("canvas").length;
+      const canvasCount = activeDocument.querySelectorAll("canvas").length;
       const sessionAlive = !!(registry.activeSession && !registry.activeSession.destroyed);
       console.assert(
         sessionAlive || canvasCount === 0,

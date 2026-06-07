@@ -1,7 +1,7 @@
 {
   "id": "goodnote-max",
   "name": "GoodNotes Max",
-  "version": "2.0.2",
+  "version": "2.0.3",
   "minAppVersion": "1.7.2",
   "description": "Minimal drawing and note plugin with toolbar and canvas support.",
   "author": "mikuloverfan",
